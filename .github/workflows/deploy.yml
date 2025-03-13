@@ -34,6 +34,10 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
+      - name: Debug Image URL
+        run: |
+          echo "Image URL: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG"
+
       - name: Build and Tag Docker Image
         run: |
           IMAGE_TAG=$(date +%s)
