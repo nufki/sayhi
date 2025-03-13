@@ -86,6 +86,5 @@
   },
   "registeredAt": "2025-03-13T11:48:56.198Z",
   "registeredBy": "arn:aws:iam::452754751479:user/kei.nufer",
-  "enableFaultInjection": false,
   "tags": []
 }
