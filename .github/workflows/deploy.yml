@@ -5,6 +5,9 @@ on:
     branches:
       - main  # Adjust if using a different branch
 
+env:
+  ECS_TASK_DEFINITION: "sayhi-task-definition"
+
 jobs:
   deploy:
     name: Build, Push, and Deploy
@@ -45,75 +48,18 @@ jobs:
         run: |
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
 
-      # 🔹 Check if the Task Definition Already Exists
-      - name: Check if Task Definition Exists
-        id: check-task-def
-        continue-on-error: true
-        run: |
-          aws ecs describe-task-definition --task-definition ${{ secrets.ECS_TASK_DEFINITION }} --query taskDefinition > sayhi-task-def.json || echo "{}" > sayhi-task-def.json
-
-      # 🔹 Register a New Task Definition If None Exists
-      - name: Register New Task Definition (if missing)
-        if: steps.check-task-def.outcome == 'failure'
-        run: |
-          echo "Task Definition not found, creating a new one..."
-          cat <<EOF > sayhi-task-def.json
-          {
-            "family": "sayhi-task-definition",
-            "containerDefinitions": [
-              {
-                "name": "sayhi",
-                "image": "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest",
-                "cpu": 1024,
-                "memory": 3072,
-                "essential": true,
-                "portMappings": [
-                  {
-                    "containerPort": 8080,
-                    "protocol": "tcp"
-                  }
-                ],
-                "logConfiguration": {
-                  "logDriver": "awslogs",
-                  "options": {
-                    "awslogs-group": "/ecs/sayhi-task-definition",
-                    "awslogs-region": "eu-west-1",
-                    "awslogs-stream-prefix": "ecs"
-                  }
-                }
-              }
-            ],
-            "executionRoleArn": "arn:aws:iam::452754751479:role/ecsTaskExecutionRole",
-            "networkMode": "awsvpc",
-            "requiresCompatibilities": ["FARGATE"],
-            "cpu": "1024",
-            "memory": "3072"
-          }
-          EOF
-          cat sayhi-task-def.json # Debug output
-          aws ecs register-task-definition --cli-input-json file://sayhi-task-def.json
-
-      # 🔹 Update the Task Definition with the Correct Image
-      - name: Update ECS Task Definition with New Image
-        run: |
-          IMAGE_TAG=$(date +%s)
-          echo "Using Image Tag: $IMAGE_TAG"
-          jq --arg image "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG" '.containerDefinitions[0].image = $image' sayhi-task-def.json > new-task-def.json
-          mv new-task-def.json sayhi-task-def.json
-          cat sayhi-task-def.json  # Debug output
-
-      # 🔹 Debug: Print the final task definition before deployment
-      - name: Debug Task Definition JSON
-        run: cat sayhi-task-def.json
-
-      - name: Register New Task Definition in AWS
-        run: |
-          aws ecs register-task-definition --cli-input-json file://sayhi-task-def.json
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          container-name: ${{ secrets.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
 
       - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: ${{ secrets.ECS_TASK_DEFINITION }}
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
           cluster: ${{ secrets.ECS_CLUSTER }}
           service: ${{ secrets.ECS_SERVICE }}
           wait-for-service-stability: true
