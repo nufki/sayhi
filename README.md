@@ -21,22 +21,14 @@ Create an ECR Repository
 aws ecr create-repository --repository-name sayhi   
 ````
 
-Authenticate Docker with ECR
-````
-aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin 4527-5475-1479.dkr.ecr.eu-west-1.amazonaws.com   
-````
 
-````
-docker push AWS_ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/sayhi:latest   
-````
-
-## Create a new ECS cluster 
+## Create a new ECS cluster (or manually create one in the AWS Console)
 ````
 aws ecs create-cluster --cluster-name sayhi-cluster   
 ````
 
 
-## Create a new ECS service inside the cluster 
+## Create a new ECS service inside the cluster  (or manually create one in the AWS Console)
 
 Fetch routes
 ````
