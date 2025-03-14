@@ -78,7 +78,7 @@ Source: 0.0.0.0/0 (for public access)
 
 
 ## Test the endpoint
-e.g. curl http://108.129.192.50:8080/api/hello
+e.g. curl http://3.250.212.26:8080/api/hello
 
 
 ## Cleanup
