@@ -2,12 +2,10 @@ name: Deploy to AWS ECS
 
 on:
   push:
-    branches:
-      - main  # Adjust if using a different branch
+    branches: [main]
 
 jobs:
   deploy:
-    name: Build, Push, and Deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -20,7 +18,7 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Build the JAR file with Maven
+      - name: Build the JAR file
         run: mvn clean package -DskipTests
 
       - name: Configure AWS Credentials
@@ -30,43 +28,26 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Log in to Amazon ECR
+      - name: Login to ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build and Tag Docker Image
+      - name: Build and Tag Image
         run: |
-          IMAGE_TAG=$(date +%s)
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT  # Ensures availability in later steps
-          docker build -t ${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG .
-          docker tag ${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+          docker build -t ${{ secrets.ECR_REPOSITORY }}:${{ env.SANITIZED_TAG }} .
+          docker tag ${{ secrets.ECR_REPOSITORY }}:${{ env.SANITIZED_TAG }} \
+            ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ env.SANITIZED_TAG }}
 
-      - name: Debug Image URL
-        run: |
-          echo "Image Tag: $IMAGE_TAG"
-          echo "Full Image URL: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG"
+      - name: Push to ECR
+        run: docker push ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ env.SANITIZED_TAG }}
 
-      - name: Push Docker Image to ECR
-        run: |
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
-
-      - name: Sanitize Image Tag
-        run: |
-          SANITIZED_TAG=$(echo "$IMAGE_TAG" | tr -cd '[:alnum:]-_')
-          echo "SANITIZED_TAG=$SANITIZED_TAG" >> $GITHUB_ENV
-          
-      - name: Update ECS Task Definition
+      - name: Render Task Definition
+        id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: sayhi-task-definition.json
-          container-name: ${{ secrets.CONTAINER_NAME }}
-          image: "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ env.SANITIZED_TAG }}"
-
-      - name: Validate Task Definition JSON
-        run: |
-          jq '.' ${{ steps.task-def.outputs.task-definition }} > /dev/null
-          echo "JSON validation passed"
+          task-definition: ./sayhi-task-definition.json
+          container-name: sayhi
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ env.SANITIZED_TAG }}
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
