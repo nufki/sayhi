@@ -90,6 +90,7 @@ jobs:
             "memory": "3072"
           }
           EOF
+          cat sayhi-task-def.json # Debug output
           aws ecs register-task-definition --cli-input-json file://sayhi-task-def.json
 
       # 🔹 Update the Task Definition with the Correct Image
@@ -99,6 +100,7 @@ jobs:
           echo "Using Image Tag: $IMAGE_TAG"
           jq --arg image "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG" '.containerDefinitions[0].image = $image' sayhi-task-def.json > new-task-def.json
           mv new-task-def.json sayhi-task-def.json
+          cat sayhi-task-def.json  # Debug output
 
       # 🔹 Debug: Print the final task definition before deployment
       - name: Debug Task Definition JSON
