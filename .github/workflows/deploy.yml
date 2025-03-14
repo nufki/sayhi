@@ -38,8 +38,8 @@ jobs:
         run: |
           IMAGE_TAG=$(date +%s)
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-          docker build -t ${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG .
-          docker tag ${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG .
+          docker tag ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
 
       - name: Push Docker Image to ECR
         run: |
@@ -50,7 +50,7 @@ jobs:
         id: check-task-def
         continue-on-error: true
         run: |
-          aws ecs describe-task-definition --task-definition ${{ secrets.ECS_TASK_DEFINITION }} --query taskDefinition > sayhi-task-def.json
+          aws ecs describe-task-definition --task-definition ${{ secrets.ECS_TASK_DEFINITION }} --query taskDefinition > sayhi-task-def.json || echo "{}" > sayhi-task-def.json
 
       # 🔹 Register a New Task Definition If None Exists
       - name: Register New Task Definition (if missing)
@@ -92,18 +92,26 @@ jobs:
           EOF
           aws ecs register-task-definition --cli-input-json file://sayhi-task-def.json
 
-      - name: Update ECS Task Definition
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: ./sayhi-task-def.json
-          container-name: ${{ secrets.CONTAINER_NAME }}
-          image: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+      # 🔹 Update the Task Definition with the Correct Image
+      - name: Update ECS Task Definition with New Image
+        run: |
+          IMAGE_TAG=$(date +%s)
+          echo "Using Image Tag: $IMAGE_TAG"
+          jq --arg image "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG" '.containerDefinitions[0].image = $image' sayhi-task-def.json > new-task-def.json
+          mv new-task-def.json sayhi-task-def.json
+
+      # 🔹 Debug: Print the final task definition before deployment
+      - name: Debug Task Definition JSON
+        run: cat sayhi-task-def.json
+
+      - name: Register New Task Definition in AWS
+        run: |
+          aws ecs register-task-definition --cli-input-json file://sayhi-task-def.json
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          task-definition: ${{ secrets.ECS_TASK_DEFINITION }}
           cluster: ${{ secrets.ECS_CLUSTER }}
           service: ${{ secrets.ECS_SERVICE }}
           wait-for-service-stability: true
