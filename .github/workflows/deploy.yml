@@ -51,13 +51,22 @@ jobs:
         run: |
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
 
+      - name: Sanitize Image Tag
+        run: |
+          SANITIZED_TAG=$(echo "$IMAGE_TAG" | tr -cd '[:alnum:]-_')
+          echo "SANITIZED_TAG=$SANITIZED_TAG" >> $GITHUB_ENV
+          
       - name: Update ECS Task Definition
-        id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: sayhi-task-definition.json
           container-name: ${{ secrets.CONTAINER_NAME }}
-          image: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+          image: "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ env.SANITIZED_TAG }}"
+
+      - name: Validate Task Definition JSON
+        run: |
+          jq '.' ${{ steps.task-def.outputs.task-definition }} > /dev/null
+          echo "JSON validation passed"
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
